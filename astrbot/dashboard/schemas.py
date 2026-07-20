@@ -26,6 +26,10 @@ class EnabledPatch(BaseModel):
     enabled: bool
 
 
+class AgyCLIActionRequest(BaseModel):
+    proxy: str | None = None
+
+
 class ApiKeyCreateRequest(OpenModel):
     name: str | None = None
     scopes: list[str] | None = None

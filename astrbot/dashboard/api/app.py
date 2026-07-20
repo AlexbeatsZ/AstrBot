@@ -11,6 +11,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
 from astrbot.dashboard.responses import ApiError, error
+from astrbot.dashboard.services.agy_cli_service import AgyCLIService
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
 from astrbot.dashboard.services.backup_service import BackupService
@@ -104,6 +105,7 @@ def create_dashboard_asgi_app(
     app.state.dashboard_static_folder = static_folder
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
     app.state.services = SimpleNamespace(
+        agy_cli=AgyCLIService(),
         config_profiles=ConfigProfileService(core_lifecycle, db),
         config_display=ConfigDisplayService(core_lifecycle),
         config_files=ConfigFileService(core_lifecycle),

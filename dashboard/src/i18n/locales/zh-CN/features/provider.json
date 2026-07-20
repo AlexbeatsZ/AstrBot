@@ -124,6 +124,33 @@
       "proxy": "代理地址"
     }
   },
+  "agyCli": {
+    "title": "Agy CLI 管理",
+    "subtitle": "检测、安装或更新 Docker 容器内的 Agy CLI，并通过浏览器终端完成认证。",
+    "runtimeProvider": "Docker 容器内 CLI",
+    "refresh": "刷新状态",
+    "installed": "已安装",
+    "notInstalled": "未安装",
+    "latest": "最新",
+    "profileInitialized": "认证配置已初始化",
+    "platform": "平台",
+    "executable": "可执行文件",
+    "dataDirectory": "持久化目录",
+    "install": "下载并安装",
+    "update": "检查并更新",
+    "webAuth": "Web 认证",
+    "persistenceHint": "Agy 的程序、认证配置和缓存保存在 AstrBot data/agy 中；使用标准 Docker Compose 的 data 挂载后，重建容器不会丢失。",
+    "latestCheckFailed": "无法检查官方最新版本",
+    "statusFailed": "获取 Agy CLI 状态失败",
+    "installSuccess": "Agy CLI 安装或更新成功",
+    "installFailed": "Agy CLI 安装或更新失败",
+    "authTitle": "Agy CLI Web 认证",
+    "authHint": "在终端中选择 Google OAuth，打开显示的链接完成登录，再把浏览器给出的授权码粘贴回终端。完成主题、条款和工作区信任设置后，可关闭此窗口。",
+    "connecting": "正在连接 Docker 内的 Agy CLI...",
+    "terminalError": "终端错误",
+    "terminalExited": "Agy CLI 已退出，退出码",
+    "disconnected": "终端连接已断开"
+  },
   "models": {
     "title": "模型",
     "available": "可用模型",

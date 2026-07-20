@@ -60,7 +60,9 @@
                 <div class="provider-config-headline">
                   <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
                   <div class="provider-config-subtitle">
-                    {{ selectedProviderSource.api_base || 'N/A' }}
+                    {{ selectedProviderSource.type === 'agy_cli_chat_completion'
+                      ? tm('agyCli.runtimeProvider')
+                      : selectedProviderSource.api_base || 'N/A' }}
                   </div>
                 </div>
 
@@ -82,6 +84,14 @@
               <v-divider></v-divider>
 
               <div class="provider-config-body">
+                <AgyCliManagerPanel
+                  v-if="editableProviderSource?.type === 'agy_cli_chat_completion'"
+                  :source="editableProviderSource"
+                  :show-message="showMessage"
+                />
+
+                <v-divider v-if="editableProviderSource?.type === 'agy_cli_chat_completion'"></v-divider>
+
                 <section class="provider-section">
                   <div class="provider-section-head">
                     <div class="provider-section-title">{{ tm('providers.settings') }}</div>
@@ -346,6 +356,7 @@ import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ItemCard from '@/components/shared/ItemCard.vue'
 import AddNewProvider from '@/components/provider/AddNewProvider.vue'
+import AgyCliManagerPanel from '@/components/provider/AgyCliManagerPanel.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
@@ -376,6 +387,7 @@ const {
   providers,
   selectedProviderType,
   selectedProviderSource,
+  editableProviderSource,
   availableModels,
   loadingModels,
   savingSource,

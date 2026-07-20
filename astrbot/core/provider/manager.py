@@ -360,6 +360,8 @@ class ProviderManager:
             ImportError: 如果提供商类型未知或无法导入对应模块，则抛出异常。
         """
         match type:
+            case "agy_cli_chat_completion":
+                from .sources.agy_cli_source import ProviderAgyCLI as ProviderAgyCLI
             case "openai_chat_completion":
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,

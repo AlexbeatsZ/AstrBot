@@ -1276,6 +1276,36 @@
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
       },
+      "agy_command": {
+        "description": "Agy executable",
+        "hint": "Uses the managed data/agy/bin installation by default; a custom command or absolute path is also accepted."
+      },
+      "agy_working_directory": {
+        "description": "Agy working directory",
+        "hint": "Uses the AstrBot data workspace directory when empty. Agy's native file tools run in this directory."
+      },
+      "agy_print_timeout": {
+        "description": "Agy print timeout",
+        "hint": "Duration passed to agy --print-timeout, for example 10m."
+      },
+      "agy_thinking_level": {
+        "description": "Agy thinking level"
+      },
+      "agy_system_prompt_mode": {
+        "description": "Agy system prompt mode",
+        "hint": "Filtered removes AstrBot-only tool and skill instructions so they do not conflict with agy's native tools."
+      },
+      "agy_dangerously_skip_permissions": {
+        "description": "Auto-approve Agy tool permissions",
+        "hint": "Passes --dangerously-skip-permissions to agy. Enable only when every chat user and the configured working directory are trusted."
+      },
+      "agy_max_output_bytes": {
+        "description": "Agy maximum output bytes"
+      },
+      "agy_env": {
+        "description": "Agy environment variables",
+        "hint": "Added only to the agy subprocess. You can also use the provider Proxy field for HTTP and HTTPS proxy variables."
+      },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
         "hint": "Close Ollama thinking mode."

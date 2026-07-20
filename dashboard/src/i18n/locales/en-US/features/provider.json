@@ -123,6 +123,33 @@
       "proxy": "Proxy"
     }
   },
+  "agyCli": {
+    "title": "Agy CLI management",
+    "subtitle": "Detect, install, or update Agy CLI inside Docker and complete authentication in a browser terminal.",
+    "runtimeProvider": "CLI inside the Docker container",
+    "refresh": "Refresh status",
+    "installed": "Installed",
+    "notInstalled": "Not installed",
+    "latest": "Latest",
+    "profileInitialized": "Auth profile initialized",
+    "platform": "Platform",
+    "executable": "Executable",
+    "dataDirectory": "Persistent directory",
+    "install": "Download and install",
+    "update": "Check and update",
+    "webAuth": "Web authentication",
+    "persistenceHint": "The executable, authentication profile, and cache live in AstrBot data/agy. They survive container recreation when the standard data volume is mounted.",
+    "latestCheckFailed": "Could not check the latest official version",
+    "statusFailed": "Failed to load Agy CLI status",
+    "installSuccess": "Agy CLI was installed or updated",
+    "installFailed": "Failed to install or update Agy CLI",
+    "authTitle": "Agy CLI Web authentication",
+    "authHint": "Choose Google OAuth in the terminal, open the displayed link, and paste the browser authorization code back into the terminal. Finish theme, terms, and workspace trust setup before closing this window.",
+    "connecting": "Connecting to Agy CLI inside Docker...",
+    "terminalError": "Terminal error",
+    "terminalExited": "Agy CLI exited with code",
+    "disconnected": "Terminal disconnected"
+  },
   "models": {
     "title": "Models",
     "available": "Available Models",

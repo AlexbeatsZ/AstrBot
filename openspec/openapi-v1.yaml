@@ -1001,6 +1001,38 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/providers/agy-cli/status:
+    post:
+      tags: [Providers]
+      summary: Detect the managed or external Agy CLI installation
+      operationId: getAgyCliStatus
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgyCLIActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/providers/agy-cli/install:
+    post:
+      tags: [Providers]
+      summary: Install or update the managed Agy CLI binary
+      operationId: installOrUpdateAgyCli
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgyCLIActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/providers/{provider_id}:
     get:
       tags: [Providers]
@@ -5288,6 +5320,13 @@ components:
       properties:
         enabled:
           type: boolean
+      additionalProperties: false
+
+    AgyCLIActionRequest:
+      type: object
+      properties:
+        proxy:
+          type: string
       additionalProperties: false
 
     ToolPermissionPatch:

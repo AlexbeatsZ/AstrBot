@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, WebSocket
 
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
+    AgyCLIActionRequest,
     EnabledPatch,
     ProviderConfigRequest,
     ProviderSourceRequest,
 )
+from astrbot.dashboard.services.agy_cli_service import AgyCLIService
 from astrbot.dashboard.services.config_service import ProviderConfigService
 
 from .auth import AuthContext, require_scope
@@ -26,6 +28,10 @@ async def require_provider_scope(request: Request) -> AuthContext:
 
 def get_service(request: Request) -> ProviderConfigService:
     return request.app.state.services.providers
+
+
+def get_agy_cli_service(request: Request) -> AgyCLIService:
+    return request.app.state.services.agy_cli
 
 
 async def _json_or_empty(request: Request) -> dict:
@@ -378,6 +384,35 @@ async def get_embedding_dimension(
         await service.get_embedding_dimension(
             _provider_config_for_dimension(service, provider_id, body)
         )
+    )
+
+
+@router.post("/providers/agy-cli/status")
+async def get_agy_cli_status(
+    payload: AgyCLIActionRequest,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: AgyCLIService = Depends(get_agy_cli_service),
+):
+    return ok(await service.status(str(payload.proxy or "").strip()))
+
+
+@router.post("/providers/agy-cli/install")
+async def install_or_update_agy_cli(
+    payload: AgyCLIActionRequest,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: AgyCLIService = Depends(get_agy_cli_service),
+):
+    result = await service.install_or_update(str(payload.proxy or "").strip())
+    return ok(result, message="Agy CLI installed or updated successfully")
+
+
+@router.websocket("/providers/agy-cli/auth/ws")
+async def agy_cli_auth_websocket(websocket: WebSocket) -> None:
+    service: AgyCLIService = websocket.app.state.services.agy_cli
+    await service.run_auth_websocket(
+        websocket,
+        token=websocket.query_params.get("token"),
+        jwt_secret=websocket.app.state.jwt_secret,
     )
 
 

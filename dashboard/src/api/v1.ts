@@ -109,6 +109,20 @@ export interface ProviderTestData {
   error?: string | null;
 }
 
+export interface AgyCliStatusData {
+  installed: boolean;
+  version?: string | null;
+  executable?: string | null;
+  installation?: 'managed' | 'external' | null;
+  latest_version?: string | null;
+  update_available: boolean;
+  platform: string;
+  latest_error?: string | null;
+  profile_initialized: boolean;
+  data_directory: string;
+  managed_binary: string;
+}
+
 export interface ProviderEmbeddingDimensionData {
   embedding_dimensions?: number;
   [key: string]: unknown;
@@ -612,6 +626,22 @@ export const providerApi = {
         },
       }),
     );
+  },
+  agyCliStatus(proxy = '') {
+    return typed<AgyCliStatusData>(
+      openApiV1.getAgyCliStatus({
+        body: { proxy },
+      }),
+    );
+  },
+  agyCliInstall(proxy = '') {
+    return typed<{ version: string; path: string; platform: string }>(
+      openApiV1.installOrUpdateAgyCli({ body: { proxy } }),
+    );
+  },
+  agyCliAuthWebSocketUrl(token: string, host = window.location.host) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${host}/api/v1/providers/agy-cli/auth/ws?token=${encodeURIComponent(token)}`;
   },
 };
 

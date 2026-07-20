@@ -205,7 +205,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const basicSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const fields = ['id', 'key', 'api_base']
+    const fields = editableProviderSource.value.type === 'agy_cli_chat_completion'
+      ? ['id']
+      : ['id', 'key', 'api_base']
     const basic: Record<string, any> = {}
 
     fields.forEach((field) => {
