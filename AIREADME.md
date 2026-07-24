@@ -16,10 +16,17 @@
 - 官方 AstrBot Docker 镜像是 Debian/glibc；官方当前清单键为 `linux_amd64` / `linux_arm64`，不能推测不存在的 musl 清单。
 - Windows 下仓库的 `pnpm generate:api` 使用 Unix `rm` 会失败，可直接运行同一 `openapi-ts` 生成器，再执行类型检查和生产构建。
 - 2026-07-25 服务器故障并非 agy CLI 回归：运行中的 AstrBot 仍是官方 `soulter/astrbot:latest` v4.26.7，未安装托管 agy，也未配置 agy provider；实际默认模型是 `sensenova/deepseek-v4-flash`。
-- AstrBot 的全局代理原为 `http://host.docker.internal:7897`，但服务器 Windows 没有监听 7897，导致容器内 `APIConnectionError`。改为已验证可从服务器访问的 `http://100.113.70.121:7897` 后，同一 SenseNova chat completion 返回 HTTP 200。
+- `host.docker.internal` 是 Docker Desktop 指向 Windows 宿主的稳定别名，本身没有失效。2026-07-25 故障是服务器的 Clash Verge/Mihomo 进程已退出，Windows 未监听 7897；Clash 配置中的自动启动开关没有形成可靠的 Windows 启动项，所以容器连接该别名时收到 connection refused。最终保留 `http://host.docker.internal:7897`，不依赖会变化的 `100.113.70.121` 地址。
+- 服务器现使用常驻 PowerShell watchdog 维护 Clash Verge 和 WSL：计划任务 `Clash Verge Autostart` 与 `OpenClaw WSL Keepalive` 均在登录时启动，循环每 15 秒检测并恢复目标，计划任务本身另配置每分钟重启、最多 999 次。受控故障测试中 Clash/7897 在 14 秒内恢复，WSL keepalive 在 6 秒内恢复。
+- 原 `run.vbs` 的注释声称会保持 WSL 存活，但实际只运行一次 `service mysql start` 后退出；原 `OpenClaw WSL Keepalive` 任务也只是启动一次子进程，子进程以结果 9 退出后任务不会自行重启。`run.vbs` 已改为触发两项 watchdog 并继续启动 MySQL。
 - AstrBot 的 `Sinm` aiocqhttp 平台必须保持 `enable: false`；2026-07-25 恢复时配置已核对并强制保持禁用，仅 `Alex` 启用。
 - OpenClaw 使用的 agy 1.1.6 和 scoped proxy wrapper 均正常；直接 `agy --print` 与 OpenClaw 完整 agent 调用都成功。OpenClaw“挂掉”的直接原因是 Windows 计划任务 `OpenClaw WSL Keepalive` 未运行，导致 WSL 与 user systemd gateway 随会话退出；启动该任务后跨 SSH 会话 health 保持 `live`。
 - OpenClaw 服务器仍存在核心 `2026.6.10` 与部分要求 plugin API `>=2026.7.1` 的 npm 插件版本警告；bundled QQBot 当前仍可连接。核心升级应作为独立部署任务处理，不应与本次运行时恢复混在一起。
+- 自定义 AstrBot 镜像必须在多阶段 Docker 构建中生成并复制 Dashboard；只复制 Python 源码会让容器回退到官方/旧 WebUI，看不到 Agy 供应商界面。`.dockerignore` 需保留 Dashboard 源码但排除本地 `node_modules` 和 `dist`。
+- 代码渲染插件的 Playwright Chromium 还需要 `libnspr4`、`libnss3`、ATK/AT-SPI、CUPS、XComposite 和 XDamage 运行库。缺少时插件会在浏览器下载完成后报共享库错误；这些依赖已固化到 Dockerfile。
+- 服务器已固定部署 `alexbeatsz/astrbot:agy-bb349f7b5`，不再使用会漂移的 `soulter/astrbot:latest`。托管 Agy 1.1.6 位于持久化数据卷，AstrBot 使用独立 HOME，仅从 OpenClaw 复制了最小认证/设置状态，没有复制会话历史。
+- 最终回归结果：AstrBot WebUI HTTP 200；SenseNova 默认模型经 `host.docker.internal:7897` 真实回复 `PROXY_OK`；Agy provider 真实回复 `ASTRBOT_AGY_OK`；Playwright Chromium 149 可启动；OpenClaw health 为 `live`。容器首次重建会为现有第三方插件重新安装 Python/浏览器依赖，因此首次健康启动可能超过一分钟。
+- 服务器关键回滚备份位于 `%LOCALAPPDATA%\Temp\.agents\astrbot-openclaw-startup-20260725-024408`、`astrbot-deploy-20260725-025448`、`astrbot-agy-config-20260725-030008` 和 `astrbot-final-deploy-bb349f7b5`。
 
 # Task Board
 
@@ -31,4 +38,8 @@
 - [x] 更新 OpenAPI、生成客户端、中英文文档和自动化测试。
 - [x] 通过 Ruff、20 项目标测试、前端类型检查和生产构建。
 - [x] 检查暂存内容，以 `88876ada7` 提交并推送到 fork 的 `master`。
-- [x] 诊断并恢复 2026-07-25 服务器故障：修正 AstrBot 代理、确认 `Sinm` 禁用、启动 OpenClaw WSL keepalive，并完成两边真实模型回归。
+- [x] 诊断 2026-07-25 服务器故障，确认根因是服务器 Clash 7897 无监听、OpenClaw keepalive 非常驻以及 AstrBot 被部署为官方镜像。
+- [x] 建立 Clash Verge 与 OpenClaw WSL 常驻 watchdog，更新 `run.vbs`，完成两项受控退出恢复测试。
+- [x] 构建并部署带 Agy CLI、Agy Dashboard 和 Chromium 依赖的固定 AstrBot 镜像 `agy-bb349f7b5`。
+- [x] 恢复 Agy 1.1.6 独立认证环境，保留 SenseNova 为默认模型并确保 `Sinm` 禁用、仅 `Alex` 连接。
+- [x] 完成 AstrBot WebUI、代理、默认 LLM、Agy LLM、Playwright、计划任务与 OpenClaw health 的端到端回归。
