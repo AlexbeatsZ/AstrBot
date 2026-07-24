@@ -32,6 +32,9 @@
 - Agy 模型目录不能硬编码。AstrBot 现沿用 OpenClaw 的 live CLI discovery 思路，在独立 HOME、代理和工作目录下运行 `agy models`；与 OpenClaw 只折叠最新 Gemini 别名不同，AstrBot 保留 CLI 返回的全部模型和思考变体，以便在供应商页面逐项添加和切换。
 - 服务器模型 API 已验证返回 11 个模型，包括 Gemini 3.6/3.5 Flash、Gemini 3.1 Pro、Claude Sonnet/Opus 和 GPT-OSS；`gemini-3.6-flash-medium` 真实 provider 调用返回 `AGY_DYNAMIC_OK`。部署镜像固定为 `alexbeatsz/astrbot:agy-b59474643`。
 - Agy 1.1.6 自带 `plugin` 管理命令和 `--sandbox`，但服务器当前没有导入任何 Agy plugin，Agy settings 也没有 permissions/sandbox 白名单，AstrBot 的危险自动批准开关保持关闭。若要开放工具，应优先采用专用工作目录、Agy 原生 sandbox、明确插件/工具 allowlist、调用超时/输出上限和审计，而不是全局启用 `--dangerously-skip-permissions`。
+- 旧 provider-source 迁移曾直接使用 `<旧 provider ID>_source`，因此旧 Agy provider `agy/gemini-3.5-flash` 会产生不合理的 `agy/gemini-3.5-flash_source`。迁移现在优先从 `source/model` ID 提取 `source`，并让连接配置相同的多个模型复用同一 provider source；服务器现有实例已清理为 `agy/gemini-3.6-flash-high`。
+- 2026-07-25 QQ 不响应的根因是部署时仅用 `compose.yml` 重建 AstrBot，使其进入 `astrbot_default`，而 Alex NapCat 位于 `astrbot_network`；虽然 Alex 配置、6201 监听和令牌均正确，跨容器反向 WebSocket 仍持续握手超时。服务器 Compose 现显式连接外部 `astrbot_network`，重建后日志确认 Alex OneBot 连接成功；Sinm 继续保持禁用。运行时回滚备份位于 `%LOCALAPPDATA%\Temp\.agents\astrbot-live-diagnosis\backup-20260725-040350`。
+- AstrBot 重建时第三方插件初始化可持续约两分钟；期间宿主 6185 的 Docker 端口已监听，但请求可能暂时返回 502。服务完成启动后，Tailscale 地址 `http://100.106.169.46:6185/`、Dashboard JS/CSS 和本地回环访问均返回 HTTP 200。
 
 # Task Board
 
@@ -50,4 +53,6 @@
 - [x] 完成 AstrBot WebUI、代理、默认 LLM、Agy LLM、Playwright、计划任务与 OpenClaw health 的端到端回归。
 - [x] 修复 Agy Web 认证终端 logger 格式错误，并通过真实 WebSocket `ready` 回归。
 - [x] 复刻 OpenClaw 的 Agy live model discovery 思路，动态显示 CLI 返回的全部 11 个模型并完成 Gemini 3.6 真实调用。
+- [x] 清理 Agy 遗留 `_source` provider ID，并修正旧 provider-source 迁移的命名和同配置复用行为。
+- [x] 修复 AstrBot 与 Alex NapCat 的 Docker 网络分离，固化 `astrbot_network` 并验证 OneBot 连接；Sinm 保持禁用。
 - [ ] 若决定开放 Agy 工具，增加显式的原生 sandbox 配置和受控插件/工具网关；在安全模型确定前不启用全局自动批准。

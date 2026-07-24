@@ -89,9 +89,35 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
             if key not in source_exclude_fields:
                 source_fields[key] = value
 
-        # Create new provider_source
-        source_id = provider.get("id", "") + "_source"
-        new_source = {"id": source_id, **source_fields}
+        # Reuse a source when legacy models have the same connection settings.
+        matching_source = next(
+            (
+                source
+                for source in provider_sources
+                if {key: value for key, value in source.items() if key != "id"}
+                == source_fields
+            ),
+            None,
+        )
+        if matching_source:
+            source_id = matching_source["id"]
+        else:
+            provider_id = str(provider.get("id", "")).strip()
+            base_source_id = (
+                provider_id.split("/", 1)[0]
+                if "/" in provider_id
+                else f"{provider_id}_source"
+            )
+            base_source_id = base_source_id or "provider_source"
+            existing_source_ids = {
+                str(source.get("id", "")) for source in provider_sources
+            }
+            source_id = base_source_id
+            counter = 1
+            while source_id in existing_source_ids:
+                source_id = f"{base_source_id}_{counter}"
+                counter += 1
+            provider_sources.append({"id": source_id, **source_fields})
 
         # Update provider to only keep necessary fields
         provider["provider_source_id"] = source_id
@@ -118,9 +144,6 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         keys_to_remove = [k for k in provider.keys() if k not in provider_only_fields]
         for key in keys_to_remove:
             del provider[key]
-
-        # Add source to provider_sources
-        provider_sources.append(new_source)
 
     if migrated:
         conf["provider_sources"] = provider_sources
