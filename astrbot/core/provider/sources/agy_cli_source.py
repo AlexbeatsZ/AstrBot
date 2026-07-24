@@ -268,7 +268,7 @@ class ProviderAgyCLI(Provider):
                         ).as_path()
                     )
                 except Exception as exc:
-                    logger.warning("Failed to prepare image for agy CLI: {}", exc)
+                    logger.warning("Failed to prepare image for agy CLI: %s", exc)
                     parts.append("[image unavailable]")
                     continue
                 image_paths.append(resolved.path.resolve())

@@ -266,7 +266,7 @@ class AgyCLIService:
             cols = int(initial.get("cols", 120))
             rows = int(initial.get("rows", 32))
             async with self._auth_lock:
-                logger.info("Agy CLI web authentication started by {}", username)
+                logger.info("Agy CLI web authentication started by %s", username)
                 await self._run_terminal(
                     websocket,
                     proxy=proxy,
@@ -276,7 +276,7 @@ class AgyCLIService:
         except WebSocketDisconnect:
             pass
         except Exception as exc:
-            logger.warning("Agy CLI web authentication failed: {}", exc)
+            logger.warning("Agy CLI web authentication failed: %s", exc)
             try:
                 await websocket.send_json({"type": "error", "message": str(exc)})
             except Exception:
