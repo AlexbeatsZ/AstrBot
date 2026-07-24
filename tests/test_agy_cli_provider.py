@@ -40,6 +40,23 @@ class _FakeProcess:
         self.returncode = self.return_code
 
 
+class _FakeCommunicateProcess:
+    def __init__(self, stdout: bytes, stderr: bytes, return_code: int = 0) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = return_code
+        self.killed = False
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return self.stdout, self.stderr
+
+    async def wait(self) -> int:
+        return self.returncode
+
+    def kill(self) -> None:
+        self.killed = True
+
+
 def _provider(tmp_path: Path, **overrides) -> ProviderAgyCLI:
     config = {
         "id": "agy-test",
@@ -53,6 +70,37 @@ def _provider(tmp_path: Path, **overrides) -> ProviderAgyCLI:
     provider = ProviderAgyCLI(config, {})
     provider.cli_manager = AgyCLIManager(tmp_path / "data")
     return provider
+
+
+@pytest.mark.asyncio
+async def test_discovers_all_models_from_logged_in_agy_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _provider(tmp_path, proxy="http://127.0.0.1:7897")
+    process = _FakeCommunicateProcess(
+        (
+            "\x1b[32mgemini-3.6-flash-high\x1b[0m\n"
+            "gemini-3.6-flash-medium\n"
+            "claude-sonnet-4-6\n"
+            "gemini-3.6-flash-high\n"
+        ).encode(),
+        b"",
+    )
+    spawn = AsyncMock(return_value=process)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+
+    models = await provider.get_models()
+
+    assert models == [
+        "gemini-3.6-flash-high",
+        "gemini-3.6-flash-medium",
+        "claude-sonnet-4-6",
+    ]
+    assert spawn.await_args.args == ("agy-test-command", "models")
+    kwargs = spawn.await_args.kwargs
+    assert kwargs["cwd"] == str(tmp_path.resolve())
+    assert kwargs["env"]["HTTPS_PROXY"] == "http://127.0.0.1:7897"
 
 
 @pytest.mark.asyncio

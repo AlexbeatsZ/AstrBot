@@ -23,7 +23,7 @@ Install and update operations run inside the active container without modifying 
 
 In the WebUI, open **Providers** → **Add Provider** → **Chat Model**, then select **Agy CLI**.
 
-- **Model ID**: defaults to `gemini-3.5-flash`; `gemini-3.1-pro` is also available.
+- **Model ID**: defaults to `gemini-3.5-flash`. The provider page calls `agy models` in the authenticated environment to discover the models currently available to the account. Use **Fetch models** to add any Gemini, Claude, GPT, or thinking variant actually returned by the CLI.
 - **Agy executable**: the default `agy` value prefers the managed binary in `data/agy/bin`; an absolute executable path is also accepted.
 - **Agy working directory**: workspace for agy's native file tools. It defaults to AstrBot's data workspace directory.
 - **Agy thinking level**: maps to agy model variants such as `gemini-3.5-flash-high`.

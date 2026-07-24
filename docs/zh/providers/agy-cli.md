@@ -23,7 +23,7 @@ agy 使用自己的本地登录状态和原生工具。AstrBot 仍负责保存�
 
 在 WebUI 中进入「服务提供商」→「新增服务提供商」→「聊天模型」，选择 **Agy CLI**。
 
-- **模型 ID**：默认 `gemini-3.5-flash`，也支持 `gemini-3.1-pro`。
+- **模型 ID**：默认 `gemini-3.5-flash`。供应商页面会调用已登录环境中的 `agy models` 动态获取当前账户可用模型；点击「获取模型」后可以添加 Gemini、Claude、GPT 等 CLI 实际返回的模型及思考变体。
 - **Agy 可执行文件**：默认 `agy` 时优先使用 `data/agy/bin` 中的托管版本，也可以填写绝对路径。
 - **Agy 工作目录**：agy 原生文件工具的工作区；留空时使用 AstrBot 的数据工作区目录。
 - **Agy 思考级别**：会映射到 agy 的模型变体，例如 `gemini-3.5-flash-high`。

@@ -37,6 +37,8 @@ AGY_NATIVE_TOOL_NOTE = (
 AGY_SYSTEM_PROMPT_MAX_CHARS = 24_000
 AGY_DEFAULT_TIMEOUT_SECONDS = 600
 AGY_DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS = 15
+AGY_MODEL_DISCOVERY_MAX_OUTPUT_BYTES = 1024 * 1024
 
 _AGY_MODEL_LABELS = {
     "gemini-3.5-flash-low": "Gemini 3.5 Flash (Low)",
@@ -144,7 +146,48 @@ class ProviderAgyCLI(Provider):
         return None
 
     async def get_models(self) -> list[str]:
-        return list(AGY_MODELS)
+        async with self._run_lock:
+            subprocess_kwargs: dict = {}
+            if os.name == "nt":
+                subprocess_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            process = await asyncio.create_subprocess_exec(
+                self.command,
+                "models",
+                cwd=str(self.cwd),
+                env=self.cli_manager.build_environment(
+                    proxy=self.proxy,
+                    extra=self.env,
+                ),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                **subprocess_kwargs,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=min(self.timeout, AGY_MODEL_DISCOVERY_TIMEOUT_SECONDS),
+                )
+            except TimeoutError as exc:
+                process.kill()
+                await process.wait()
+                raise RuntimeError("agy model discovery timed out") from exc
+
+        if len(stdout) + len(stderr) > AGY_MODEL_DISCOVERY_MAX_OUTPUT_BYTES:
+            raise RuntimeError("agy model discovery output exceeded 1 MiB")
+        if process.returncode != 0:
+            detail = (stderr or stdout).decode("utf-8", "replace").strip()
+            raise RuntimeError(
+                f"agy models exited with code {process.returncode}"
+                + (f": {detail[:4096]}" if detail else "")
+            )
+
+        output = _ANSI_ESCAPE_RE.sub("", stdout.decode("utf-8", "replace"))
+        models = list(
+            dict.fromkeys(line.strip() for line in output.splitlines() if line.strip())
+        )
+        if not models:
+            raise RuntimeError("agy models returned no available models")
+        return models
 
     def _resolve_model(self, model: str | None) -> str:
         """Map AstrBot model settings to names accepted by current agy releases."""
