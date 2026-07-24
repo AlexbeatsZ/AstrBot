@@ -27,6 +27,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libffi-dev \
     libssl-dev \
+    libnspr4 \
+    libnss3 \
+    libatk-bridge2.0-0t64 \
+    libatk1.0-0t64 \
+    libatspi2.0-0t64 \
+    libcups2t64 \
+    libxcomposite1 \
+    libxdamage1 \
     ca-certificates \
     bash \
     ffmpeg \
