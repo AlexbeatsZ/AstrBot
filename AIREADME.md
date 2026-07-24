@@ -24,9 +24,14 @@
 - OpenClaw 服务器仍存在核心 `2026.6.10` 与部分要求 plugin API `>=2026.7.1` 的 npm 插件版本警告；bundled QQBot 当前仍可连接。核心升级应作为独立部署任务处理，不应与本次运行时恢复混在一起。
 - 自定义 AstrBot 镜像必须在多阶段 Docker 构建中生成并复制 Dashboard；只复制 Python 源码会让容器回退到官方/旧 WebUI，看不到 Agy 供应商界面。`.dockerignore` 需保留 Dashboard 源码但排除本地 `node_modules` 和 `dist`。
 - 代码渲染插件的 Playwright Chromium 还需要 `libnspr4`、`libnss3`、ATK/AT-SPI、CUPS、XComposite 和 XDamage 运行库。缺少时插件会在浏览器下载完成后报共享库错误；这些依赖已固化到 Dockerfile。
-- 服务器已固定部署 `alexbeatsz/astrbot:agy-bb349f7b5`，不再使用会漂移的 `soulter/astrbot:latest`。托管 Agy 1.1.6 位于持久化数据卷，AstrBot 使用独立 HOME，仅从 OpenClaw 复制了最小认证/设置状态，没有复制会话历史。
+- 服务器使用固定的自定义 Agy 镜像，不再使用会漂移的 `soulter/astrbot:latest`。托管 Agy 1.1.6 位于持久化数据卷，AstrBot 使用独立 HOME，仅从 OpenClaw 复制了最小认证/设置状态，没有复制会话历史。
 - 最终回归结果：AstrBot WebUI HTTP 200；SenseNova 默认模型经 `host.docker.internal:7897` 真实回复 `PROXY_OK`；Agy provider 真实回复 `ASTRBOT_AGY_OK`；Playwright Chromium 149 可启动；OpenClaw health 为 `live`。容器首次重建会为现有第三方插件重新安装 Python/浏览器依赖，因此首次健康启动可能超过一分钟。
-- 服务器关键回滚备份位于 `%LOCALAPPDATA%\Temp\.agents\astrbot-openclaw-startup-20260725-024408`、`astrbot-deploy-20260725-025448`、`astrbot-agy-config-20260725-030008` 和 `astrbot-final-deploy-bb349f7b5`。
+- 服务器关键回滚备份位于 `%LOCALAPPDATA%\Temp\.agents\astrbot-openclaw-startup-20260725-024408`、`astrbot-deploy-20260725-025448`、`astrbot-agy-config-20260725-030008`、`astrbot-final-deploy-bb349f7b5`、`astrbot-auth-fix-backup-19d20b9e4` 和 `astrbot-models-backup-b59474643`。
+- Agy 的 `filtered` 提示词模式会删除 AstrBot 固定 Function Calling 提示、skills-like 提示，以及标题为 tools、skills、model aliases、messaging 的二级章节；人格、回复风格和对话历史仍保留，系统提示词超过 24000 字符时保留首尾。Agy provider 不消费 AstrBot `func_tool`，而是提示 Agy 使用自己的原生工具，避免两套工具协议冲突。
+- 2026-07-25 Agy Web 认证终端无响应的直接原因是新增代码对标准 Python logger 使用了 `{}` 占位符；日志 handler 抛出 `TypeError` 后，异常日志又重复触发同一错误。已改为 `%s` 并增加 WebSocket 启动路径回归测试，服务器真实 WebSocket 返回 `ready`。
+- Agy 模型目录不能硬编码。AstrBot 现沿用 OpenClaw 的 live CLI discovery 思路，在独立 HOME、代理和工作目录下运行 `agy models`；与 OpenClaw 只折叠最新 Gemini 别名不同，AstrBot 保留 CLI 返回的全部模型和思考变体，以便在供应商页面逐项添加和切换。
+- 服务器模型 API 已验证返回 11 个模型，包括 Gemini 3.6/3.5 Flash、Gemini 3.1 Pro、Claude Sonnet/Opus 和 GPT-OSS；`gemini-3.6-flash-medium` 真实 provider 调用返回 `AGY_DYNAMIC_OK`。部署镜像固定为 `alexbeatsz/astrbot:agy-b59474643`。
+- Agy 1.1.6 自带 `plugin` 管理命令和 `--sandbox`，但服务器当前没有导入任何 Agy plugin，Agy settings 也没有 permissions/sandbox 白名单，AstrBot 的危险自动批准开关保持关闭。若要开放工具，应优先采用专用工作目录、Agy 原生 sandbox、明确插件/工具 allowlist、调用超时/输出上限和审计，而不是全局启用 `--dangerously-skip-permissions`。
 
 # Task Board
 
@@ -43,3 +48,6 @@
 - [x] 构建并部署带 Agy CLI、Agy Dashboard 和 Chromium 依赖的固定 AstrBot 镜像 `agy-bb349f7b5`。
 - [x] 恢复 Agy 1.1.6 独立认证环境，保留 SenseNova 为默认模型并确保 `Sinm` 禁用、仅 `Alex` 连接。
 - [x] 完成 AstrBot WebUI、代理、默认 LLM、Agy LLM、Playwright、计划任务与 OpenClaw health 的端到端回归。
+- [x] 修复 Agy Web 认证终端 logger 格式错误，并通过真实 WebSocket `ready` 回归。
+- [x] 复刻 OpenClaw 的 Agy live model discovery 思路，动态显示 CLI 返回的全部 11 个模型并完成 Gemini 3.6 真实调用。
+- [ ] 若决定开放 Agy 工具，增加显式的原生 sandbox 配置和受控插件/工具网关；在安全模型确定前不启用全局自动批准。
