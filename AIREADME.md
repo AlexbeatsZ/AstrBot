@@ -44,6 +44,9 @@
 - 当前 Agy provider 仍有三项能力缺口：所有会话共用 `data/workspaces` 而非 UMO 级目录；`func_tool` 被忽略，AstrBot 插件/MCP/Web 工具不会自动转交给 Agy；无会话 `--print` 不适合 `ask_permission`、`ask_question`、`schedule` 等交互或跨进程能力。后续 custom agent 应排除这些工具，若需 AstrBot 工具应通过受控 MCP bridge 暴露 allowlist。
 - Agy CLI 的 Project 不必先做持久化 ID 管理：启动日志表明它会把进程 `cwd` 作为 `workspaceDirs`。AstrBot 已把缺省 `ProviderRequest.session_id` 设为 UMO，因此 provider 可直接复用 `normalize_umo_for_workspace(session_id)`，将每次 Agy 调用的 `cwd` 指向 `data/workspaces/<normalized_umo>`，形成最小的会话级 Project。
 - 现有 AstrBot Docker 只能隔离 Windows 宿主，不能隔离同一挂载卷里的 Agy 认证、AstrBot 配置和其他会话。首版应组合四层边界：custom agent 提示约束、UMO 级 cwd/Project、Agy `allowNonWorkspaceAccess=false` 与原生 terminal sandbox、最外层 AstrBot Docker。暂不采用每请求子容器；只有在 Agy 原生文件策略或 sandbox 回归不能可靠阻止跨 workspace 访问时，再引入仅挂载单一 workspace 的 Agy sidecar/container。
+- Agy terminal sandbox 与聊天隐私是两套边界：sandbox 约束命令执行，AstrBot 传入的 `contexts` 决定模型本轮看到哪些聊天。Agy 自身仍会在独立 HOME 写入 conversation DB；官方按 cwd 过滤可恢复会话，但工具默认可访问 Agy app data。应使用 UMO 级 cwd、永不传 `--continue`/`--conversation`、在 custom agent 中禁用恢复/读取历史，并显式 deny Agy conversation/cache 路径的文件工具访问。
+- Agy provider 当前只在函数签名中接收 `func_tool`，实际未读取工具清单或返回 AstrBot tool call，因此服务器上的 `render_code_to_image`、`render_file_to_image`、`render_math`、`send_image` 等 `@filter.llm_tool` 对 Agy 不可见。相反，`on_llm_request`、`on_llm_response`、`on_decorating_result` 等外围插件钩子仍经过 AstrBot 主流水线，通常可以继续作用于 Agy 的最终文本。
+- 渲染工具的最小桥接不必先实现 MCP：只向 Agy custom agent 注入经过 allowlist 的 AstrBot 工具 schema，让 Agy 用严格、整段匹配的结构化信封请求宿主工具；Agy provider 校验工具名和参数后返回标准 `LLMResponse` tool call，由现有 `FunctionToolExecutor` 携带当前 `AstrMessageEvent` 执行，下一轮再把 tool result 交回 Agy。此桥必须默认仅开放渲染类工具，因为宿主工具运行在 Agy sandbox 之外。
 
 # Task Board
 
@@ -66,4 +69,5 @@
 - [x] 修复 AstrBot 与 Alex NapCat 的 Docker 网络分离，固化 `astrbot_network` 并验证 OneBot 连接；Sinm 保持禁用。
 - [x] 研究 AstrBot 普通模型的 Prompt/Skills/Tools/Sandbox 分层，并验证 Agy CLI 原生 Agent、Skills、工具和 sandbox 的实际行为。
 - [ ] 为 Agy provider 增加 UMO 级 cwd/Project、`--agent astrbot` custom agent、`--sandbox` 和独立 HOME 的 `proceed-in-sandbox` 安全配置；在完成跨 workspace 与无头回归前不启用全局自动批准。
-- [ ] 设计 Agy 原生 Skills 管理；只同步 portable Skills，依赖 AstrBot 工具的 Skills 留待受控 MCP bridge 实现后开放。
+- [ ] 设计 Agy 原生 Skills 管理；只同步 portable Skills，依赖 AstrBot 工具的 Skills 留待受控 host-tool bridge（必要时再升级 MCP）实现后开放。
+- [ ] 为 Agy 增加默认仅包含代码/Markdown/数学渲染工具的 AstrBot host-tool allowlist，使用结构化信封转为标准 AgentRunner tool call；验证图片直发、工具结果回传、伪造工具名拒绝和非 allowlist 工具不可见。
