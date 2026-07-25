@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -19,6 +20,46 @@ def test_managed_binary_is_preferred_and_home_is_persistent(tmp_path: Path) -> N
     assert env["HTTPS_PROXY"] == "http://proxy:7890"
     assert env["SSH_CONNECTION"]
     assert env["PATH"].startswith(f"{manager.bin_dir}{os.pathsep}")
+
+
+def test_astrbot_agent_config_preserves_settings_and_enforces_isolation(
+    tmp_path: Path,
+) -> None:
+    manager = AgyCLIManager(tmp_path)
+    settings_path = manager.home_dir / ".gemini" / "antigravity-cli" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "trustedWorkspaces": ["/existing"],
+                "permissions": {"allow": ["read_url(example.com)"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    agent_path = manager.ensure_astrbot_agent_config()
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+
+    assert settings["trustedWorkspaces"] == ["/existing"]
+    assert settings["permissions"]["allow"] == ["read_url(example.com)"]
+    assert "unsandboxed(*)" in settings["permissions"]["deny"]
+    assert settings["toolPermission"] == "proceed-in-sandbox"
+    assert settings["artifactReviewPolicy"] == "always-proceed"
+    assert settings["allowNonWorkspaceAccess"] is False
+    assert settings["enableTerminalSandbox"] is True
+    assert agent_path.name == "agent.md"
+    assert "name: astrbot" in agent_path.read_text(encoding="utf-8")
+    assert "commandExecutionPolicy: sandbox" in agent_path.read_text(encoding="utf-8")
+    skill_path = (
+        manager.home_dir
+        / ".gemini"
+        / "config"
+        / "skills"
+        / "astrbot-host-rendering"
+        / "SKILL.md"
+    )
+    assert "name: astrbot-host-rendering" in skill_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.asyncio

@@ -1282,7 +1282,15 @@
       },
       "agy_working_directory": {
         "description": "Agy working directory",
-        "hint": "Uses the AstrBot data workspace directory when empty. Agy's native file tools run in this directory."
+        "hint": "Uses the AstrBot data workspace directory when empty. Each chat origin gets an isolated child directory by default."
+      },
+      "agy_isolate_workspaces": {
+        "description": "Isolate Agy chat workspaces",
+        "hint": "Uses a separate working directory for each chat origin so Agy file tools cannot read another chat's workspace."
+      },
+      "agy_sandbox": {
+        "description": "Enable Agy native sandbox",
+        "hint": "Uses Agy's native --sandbox and proceed-in-sandbox policy without creating another Docker container."
       },
       "agy_print_timeout": {
         "description": "Agy print timeout",
@@ -1298,6 +1306,10 @@
       "agy_dangerously_skip_permissions": {
         "description": "Auto-approve Agy tool permissions",
         "hint": "Passes --dangerously-skip-permissions to agy. Enable only when every chat user and the configured working directory are trusted."
+      },
+      "agy_host_tool_allowlist": {
+        "description": "Agy host tool allowlist",
+        "hint": "Only these AstrBot tools are exposed to Agy. They execute outside Agy's sandbox; the defaults are rendering and image delivery tools."
       },
       "agy_max_output_bytes": {
         "description": "Agy maximum output bytes"

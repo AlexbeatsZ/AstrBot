@@ -3,11 +3,15 @@ import copy
 import json
 import os
 import re
+import shutil
 import subprocess
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
+
+import jsonschema
 
 from astrbot import logger
 from astrbot.api.provider import Provider
@@ -22,6 +26,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.workspace import normalize_umo_for_workspace
 
 from ..agy_cli_manager import AgyCLIManager
 from ..register import register_provider_adapter
@@ -32,7 +37,15 @@ AGY_GEMINI_PRO_MODEL = "gemini-3.1-pro"
 AGY_MODELS = [AGY_GEMINI_FLASH_MODEL, AGY_GEMINI_PRO_MODEL]
 AGY_NATIVE_TOOL_NOTE = (
     "You are running inside agy CLI via AstrBot. Use agy's native tools when "
-    "needed; do not emit AstrBot-specific tool-call syntax."
+    "needed. Emit an AstrBot host-tool envelope only when the current prompt "
+    "explicitly provides the allowlisted protocol."
+)
+AGY_AGENT_NAME = "astrbot"
+AGY_DEFAULT_HOST_TOOL_ALLOWLIST = (
+    "render_code_to_image",
+    "render_file_to_image",
+    "render_math",
+    "send_image",
 )
 AGY_SYSTEM_PROMPT_MAX_CHARS = 24_000
 AGY_DEFAULT_TIMEOUT_SECONDS = 600
@@ -50,6 +63,9 @@ _AGY_MODEL_LABELS = {
 _AGY_MODEL_IDS_BY_LABEL = {label: model for model, label in _AGY_MODEL_LABELS.items()}
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B\][\s\S]*?(?:\x07|\x1B\\)|\x1B\[[0-?]*[ -/]*[@-~]")
+_AGY_HOST_TOOL_CALL_RE = re.compile(
+    r"\A<astrbot-tool-call>\s*(\{[\s\S]*\})\s*</astrbot-tool-call>\Z"
+)
 
 
 class _AgyOutputLimitError(RuntimeError):
@@ -82,6 +98,21 @@ class ProviderAgyCLI(Provider):
         ).strip()
         self.dangerously_skip_permissions = bool(
             provider_config.get("agy_dangerously_skip_permissions", False)
+        )
+        self.sandbox_enabled = bool(provider_config.get("agy_sandbox", True))
+        self.isolate_workspaces = bool(
+            provider_config.get("agy_isolate_workspaces", True)
+        )
+        configured_allowlist = provider_config.get(
+            "agy_host_tool_allowlist", list(AGY_DEFAULT_HOST_TOOL_ALLOWLIST)
+        )
+        if not isinstance(configured_allowlist, list) or any(
+            not isinstance(name, str) or not name.strip()
+            for name in configured_allowlist
+        ):
+            raise ValueError("agy_host_tool_allowlist must be a list of tool names")
+        self.host_tool_allowlist = frozenset(
+            name.strip() for name in configured_allowlist
         )
         if self.system_prompt_mode not in {"filtered", "full", "none"}:
             raise ValueError(
@@ -135,6 +166,24 @@ class ProviderAgyCLI(Provider):
         self.env = dict(configured_env)
         self.proxy = str(provider_config.get("proxy") or "").strip()
         self._run_lock = asyncio.Lock()
+
+    def _resolve_working_directory(self, session_id: str | None) -> Path:
+        """Resolve and create the workspace used for one Agy request.
+
+        Args:
+            session_id: AstrBot unified message origin.
+
+        Returns:
+            The provider root or a normalized per-session child directory.
+        """
+        if not self.isolate_workspaces:
+            return self.cwd
+        workspace = (
+            self.cwd / normalize_umo_for_workspace(str(session_id or "unknown"))
+        ).resolve()
+        workspace.relative_to(self.cwd)
+        workspace.mkdir(parents=True, exist_ok=True)
+        return workspace
 
     def get_current_key(self) -> str:
         return "agy-cli"
@@ -276,6 +325,7 @@ class ProviderAgyCLI(Provider):
         content: object,
         image_paths: list[Path],
         exit_stack: AsyncExitStack,
+        working_directory: Path,
     ) -> str:
         """Render one OpenAI-style content payload and materialize images."""
         if isinstance(content, str):
@@ -314,7 +364,18 @@ class ProviderAgyCLI(Provider):
                     logger.warning("Failed to prepare image for agy CLI: %s", exc)
                     parts.append("[image unavailable]")
                     continue
-                image_paths.append(resolved.path.resolve())
+                image_path = resolved.path.resolve()
+                try:
+                    image_path.relative_to(working_directory)
+                except ValueError:
+                    input_dir = working_directory / ".astrbot-inputs"
+                    input_dir.mkdir(parents=True, exist_ok=True)
+                    suffix = image_path.suffix or ".bin"
+                    copied_path = input_dir / f"{uuid4().hex}{suffix}"
+                    await asyncio.to_thread(shutil.copyfile, image_path, copied_path)
+                    exit_stack.callback(copied_path.unlink, missing_ok=True)
+                    image_path = copied_path
+                image_paths.append(image_path)
                 parts.append("[image attached]")
             elif item_type == "audio_url":
                 parts.append(
@@ -337,6 +398,8 @@ class ProviderAgyCLI(Provider):
         self,
         contexts: list[dict],
         exit_stack: AsyncExitStack,
+        working_directory: Path,
+        host_tool_prompt: str = "",
     ) -> tuple[str, list[Path]]:
         """Convert AstrBot context into the single prompt expected by agy."""
         system_parts: list[str] = []
@@ -345,7 +408,7 @@ class ProviderAgyCLI(Provider):
         for message in contexts:
             role = str(message.get("role") or "user")
             content = await self._format_content(
-                message.get("content"), image_paths, exit_stack
+                message.get("content"), image_paths, exit_stack, working_directory
             )
             if role == "system":
                 if content:
@@ -368,6 +431,10 @@ class ProviderAgyCLI(Provider):
 
         sections: list[str] = []
         system_prompt = self._resolve_system_prompt("\n\n".join(system_parts))
+        if host_tool_prompt:
+            system_prompt = "\n\n".join(
+                part for part in (system_prompt, host_tool_prompt) if part
+            )
         if system_prompt:
             sections.append(f"System:\n{system_prompt}")
         if conversation_parts:
@@ -399,16 +466,20 @@ class ProviderAgyCLI(Provider):
         model: str,
         image_paths: list[Path],
         abort_signal: asyncio.Event | None,
+        working_directory: Path,
     ) -> tuple[str, str, int]:
         """Execute agy without a shell and capture bounded UTF-8 output."""
         args: list[str] = []
         if self.dangerously_skip_permissions:
             args.append("--dangerously-skip-permissions")
+        if self.sandbox_enabled:
+            args.append("--sandbox")
+        args.extend(["--agent", AGY_AGENT_NAME])
         args.extend(["--model", model, "--print-timeout", self.print_timeout])
         extra_dirs: list[Path] = []
         for image_path in image_paths:
             try:
-                image_path.relative_to(self.cwd)
+                image_path.relative_to(working_directory)
             except ValueError:
                 if image_path.parent not in extra_dirs:
                     extra_dirs.append(image_path.parent)
@@ -425,7 +496,7 @@ class ProviderAgyCLI(Provider):
             process = await asyncio.create_subprocess_exec(
                 self.command,
                 *args,
-                cwd=str(self.cwd),
+                cwd=str(working_directory),
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -534,8 +605,43 @@ class ProviderAgyCLI(Provider):
                 context_query.extend(result.to_openai_messages())
 
         async with self._run_lock, AsyncExitStack() as exit_stack:
+            working_directory = self._resolve_working_directory(session_id)
+            self.cli_manager.ensure_astrbot_agent_config()
+            available_host_tools = {}
+            if func_tool:
+                available_host_tools = {
+                    tool.name: tool
+                    for tool in func_tool.tools
+                    if bool(getattr(tool, "active", True))
+                    and tool.name in self.host_tool_allowlist
+                }
+            host_tool_prompt = ""
+            if available_host_tools:
+                schemas = [
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters
+                        or {"type": "object", "properties": {}},
+                    }
+                    for tool in available_host_tools.values()
+                ]
+                host_tool_prompt = (
+                    "AstrBot exposes only the host tools in the JSON list below. "
+                    "These tools run outside Agy's terminal sandbox, so use them only "
+                    "when needed for rendering or sending the requested result. To "
+                    "request exactly one host tool, your entire response must be "
+                    '<astrbot-tool-call>{"name":"TOOL_NAME","arguments":{...}}'
+                    "</astrbot-tool-call> with no Markdown fence or other text. Never "
+                    "request a tool not listed here. If no host tool is needed, reply "
+                    "normally.\n\n"
+                    + json.dumps(schemas, ensure_ascii=False, separators=(",", ":"))
+                )
             agy_prompt, image_paths = await self._format_prompt(
-                context_query, exit_stack
+                context_query,
+                exit_stack,
+                working_directory,
+                host_tool_prompt,
             )
             if not agy_prompt:
                 raise ValueError("agy request contains no text or image content")
@@ -545,6 +651,7 @@ class ProviderAgyCLI(Provider):
                 resolved_model,
                 image_paths,
                 kwargs.get("abort_signal"),
+                working_directory,
             )
             model_error = (stderr or stdout).lower()
             legacy_model = self._resolve_legacy_model(model)
@@ -562,6 +669,7 @@ class ProviderAgyCLI(Provider):
                     legacy_model,
                     image_paths,
                     kwargs.get("abort_signal"),
+                    working_directory,
                 )
 
         if return_code != 0:
@@ -578,6 +686,42 @@ class ProviderAgyCLI(Provider):
             raise RuntimeError(completion_text[:4096])
         input_tokens = max(1, round(len(agy_prompt) / 4))
         output_tokens = max(1, round(len(completion_text) / 4))
+        host_tool_match = _AGY_HOST_TOOL_CALL_RE.fullmatch(completion_text)
+        if host_tool_match:
+            try:
+                tool_request = json.loads(host_tool_match.group(1))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    "Agy returned an invalid host-tool envelope"
+                ) from exc
+            if not isinstance(tool_request, dict):
+                raise RuntimeError("Agy host-tool request must be a JSON object")
+            tool_name = tool_request.get("name")
+            tool_args = tool_request.get("arguments", {})
+            if tool_name not in available_host_tools:
+                raise RuntimeError(
+                    f"Agy requested a host tool outside the allowlist: {tool_name}"
+                )
+            if not isinstance(tool_args, dict):
+                raise RuntimeError("Agy host-tool arguments must be a JSON object")
+            try:
+                jsonschema.validate(
+                    tool_args,
+                    available_host_tools[tool_name].parameters
+                    or {"type": "object", "properties": {}},
+                )
+            except jsonschema.ValidationError as exc:
+                raise RuntimeError(
+                    f"Agy host-tool arguments failed validation: {exc.message}"
+                ) from exc
+            return LLMResponse(
+                role="tool",
+                completion_text="",
+                tools_call_args=[tool_args],
+                tools_call_name=[tool_name],
+                tools_call_ids=[f"agy_host_{uuid4().hex}"],
+                usage=TokenUsage(input_other=input_tokens, output=output_tokens),
+            )
         return LLMResponse(
             role="assistant",
             result_chain=MessageChain().message(completion_text),

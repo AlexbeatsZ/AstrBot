@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import platform
 import shutil
@@ -55,6 +56,138 @@ class AgyCLIManager:
         """Create persistent directories without touching global system state."""
         self.bin_dir.mkdir(parents=True, exist_ok=True)
         self.home_dir.mkdir(parents=True, exist_ok=True)
+
+    def ensure_astrbot_agent_config(self) -> Path:
+        """Persist the sandboxed custom agent used by the AstrBot provider.
+
+        Returns:
+            Path to the generated custom agent definition.
+
+        Raises:
+            ValueError: If the existing managed settings file is not a JSON object.
+        """
+        self.ensure_runtime_directories()
+        app_dir = self.home_dir / ".gemini" / "antigravity-cli"
+        app_dir.mkdir(parents=True, exist_ok=True)
+        settings_path = app_dir / "settings.json"
+        settings: dict = {}
+        if settings_path.is_file():
+            try:
+                loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Agy managed settings are invalid JSON: {settings_path}"
+                ) from exc
+            if not isinstance(loaded, dict):
+                raise ValueError(
+                    f"Agy managed settings must contain a JSON object: {settings_path}"
+                )
+            settings = loaded
+
+        permissions = settings.get("permissions")
+        if not isinstance(permissions, dict):
+            permissions = {}
+        deny = permissions.get("deny")
+        if not isinstance(deny, list):
+            deny = []
+        protected_roots = (
+            app_dir / "conversations",
+            app_dir / "cache",
+            app_dir / "conversation_summaries.db",
+        )
+        managed_denies = ["unsandboxed(*)"]
+        for protected_root in protected_roots:
+            managed_denies.extend(
+                (
+                    f"read_file({protected_root})",
+                    f"write_file({protected_root})",
+                )
+            )
+        permissions["deny"] = list(
+            dict.fromkeys(
+                [rule for rule in deny if isinstance(rule, str)] + managed_denies
+            )
+        )
+        settings.update(
+            {
+                "toolPermission": "proceed-in-sandbox",
+                "artifactReviewPolicy": "always-proceed",
+                "allowNonWorkspaceAccess": False,
+                "enableTerminalSandbox": True,
+                "permissions": permissions,
+            }
+        )
+        serialized_settings = (
+            json.dumps(settings, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        )
+        if (
+            not settings_path.is_file()
+            or settings_path.read_text(encoding="utf-8") != serialized_settings
+        ):
+            settings_tmp = settings_path.with_suffix(".json.tmp")
+            settings_tmp.write_text(serialized_settings, encoding="utf-8")
+            os.replace(settings_tmp, settings_path)
+
+        agent_dir = self.home_dir / ".gemini" / "config" / "agents" / "astrbot"
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        agent_path = agent_dir / "agent.md"
+        agent_definition = """---
+name: astrbot
+description: Headless AstrBot agent isolated to one chat workspace.
+mainAgent: true
+subagent: false
+hidden: false
+inheritMcp: false
+commandExecutionPolicy: sandbox
+---
+
+# Execution Contract
+
+You run non-interactively as a stateless worker for AstrBot.
+
+- Treat the current working directory as the only user workspace.
+- Never inspect, query, resume, or disclose Agy conversation databases, summaries, or caches.
+- Use native terminal and file tools only inside the current workspace and keep terminal execution sandboxed.
+- Do not request interactive approval or ask a follow-up question. If an operation is blocked, explain the limitation in the final response.
+- Discover and use relevant native skills from the current workspace's `.agents/skills` directory.
+- When AstrBot provides an allowlisted host-tool protocol, request a host tool only with the exact envelope specified in the task prompt. Never invent tool names.
+- Return a concise final answer after completing or safely declining the task.
+"""
+        if (
+            not agent_path.is_file()
+            or agent_path.read_text(encoding="utf-8") != agent_definition
+        ):
+            agent_tmp = agent_path.with_suffix(".md.tmp")
+            agent_tmp.write_text(agent_definition, encoding="utf-8")
+            os.replace(agent_tmp, agent_path)
+
+        skill_dir = (
+            self.home_dir / ".gemini" / "config" / "skills" / "astrbot-host-rendering"
+        )
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_path = skill_dir / "SKILL.md"
+        skill_definition = """---
+name: astrbot-host-rendering
+description: Uses AstrBot's allowlisted host tools for Markdown, code, math, and image rendering or delivery.
+---
+
+# AstrBot Host Rendering
+
+Use this skill when the user asks for rendered Markdown, source code, formulas, or an image response.
+
+1. Read the current prompt's host-tool schema and choose only a listed rendering tool.
+2. Emit exactly one complete `<astrbot-tool-call>...</astrbot-tool-call>` envelope.
+3. After AstrBot returns the tool result, use another listed tool only when the result explicitly requires it, such as `send_image`.
+4. Never request shell, file, browser, network, or administrative host tools. Native Agy tools remain subject to the current workspace and sandbox.
+"""
+        if (
+            not skill_path.is_file()
+            or skill_path.read_text(encoding="utf-8") != skill_definition
+        ):
+            skill_tmp = skill_path.with_suffix(".md.tmp")
+            skill_tmp.write_text(skill_definition, encoding="utf-8")
+            os.replace(skill_tmp, skill_path)
+        return agent_path
 
     def resolve_command(self, configured_command: str | None = None) -> str:
         """Prefer AstrBot's managed binary for the default ``agy`` command.
