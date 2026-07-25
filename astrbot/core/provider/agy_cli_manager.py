@@ -139,6 +139,13 @@ subagent: false
 hidden: false
 inheritMcp: false
 commandExecutionPolicy: sandbox
+tools:
+  - view_file
+  - list_dir
+  - grep_search
+  - find_by_name
+  - run_command
+  - edit_file
 ---
 
 # Execution Contract

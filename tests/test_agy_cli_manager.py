@@ -49,8 +49,11 @@ def test_astrbot_agent_config_preserves_settings_and_enforces_isolation(
     assert settings["allowNonWorkspaceAccess"] is False
     assert settings["enableTerminalSandbox"] is True
     assert agent_path.name == "agent.md"
-    assert "name: astrbot" in agent_path.read_text(encoding="utf-8")
-    assert "commandExecutionPolicy: sandbox" in agent_path.read_text(encoding="utf-8")
+    agent_definition = agent_path.read_text(encoding="utf-8")
+    assert "name: astrbot" in agent_definition
+    assert "commandExecutionPolicy: sandbox" in agent_definition
+    assert "  - run_command" in agent_definition
+    assert "  - edit_file" in agent_definition
     skill_path = (
         manager.home_dir
         / ".gemini"
