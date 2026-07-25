@@ -7,6 +7,10 @@ services:
     image: soulter/astrbot:latest
     container_name: astrbot
     restart: always
+    # Agy's Linux namespace sandbox requires unshare, which Docker's default
+    # seccomp profile blocks. This does not add Linux capabilities.
+    security_opt:
+      - seccomp=unconfined
     ports: # mappings description: https://github.com/AstrBotDevs/AstrBot/issues/497
       - "6185:6185" # 必选，AstrBot WebUI 端口
       - "6199:6199" # 可选, QQ 个人号 WebSocket 端口

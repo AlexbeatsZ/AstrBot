@@ -431,6 +431,17 @@ class ProviderAgyCLI(Provider):
 
         sections: list[str] = []
         system_prompt = self._resolve_system_prompt("\n\n".join(system_parts))
+        execution_scope = (
+            "# Agy Execution Scope\n\n"
+            f"- The active AstrBot workspace is `{working_directory}`.\n"
+            "- For every `run_command` call, set `Cwd` to that exact workspace "
+            "or one of its descendants. The shell's default directory is Agy "
+            "scratch space, not the active workspace.\n"
+            "- Do not access parent or sibling workspace directories."
+        )
+        system_prompt = "\n\n".join(
+            part for part in (execution_scope, system_prompt) if part
+        )
         if host_tool_prompt:
             system_prompt = "\n\n".join(
                 part for part in (system_prompt, host_tool_prompt) if part

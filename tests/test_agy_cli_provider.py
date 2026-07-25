@@ -132,6 +132,8 @@ async def test_formats_context_and_filters_astrbot_tooling(tmp_path: Path) -> No
     assert "AstrBot-only skill" not in prompt
     assert TOOL_CALL_PROMPT not in prompt
     assert "Use plain text." in prompt
+    assert f"The active AstrBot workspace is `{tmp_path.resolve()}`." in prompt
+    assert "set `Cwd` to that exact workspace" in prompt
     assert "User:\nHello" in prompt
     assert "Assistant:\nHi" in prompt
     assert "Tool result (lookup):\nresult" in prompt

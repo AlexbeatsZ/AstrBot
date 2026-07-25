@@ -103,7 +103,7 @@ class AgyCLIManager:
             app_dir / "cache",
             app_dir / "conversation_summaries.db",
         )
-        managed_denies = ["unsandboxed(*)"]
+        managed_denies: list[str] = []
         for protected_root in protected_roots:
             managed_denies.extend(
                 (
@@ -113,7 +113,12 @@ class AgyCLIManager:
             )
         permissions["deny"] = list(
             dict.fromkeys(
-                [rule for rule in deny if isinstance(rule, str)] + managed_denies
+                [
+                    rule
+                    for rule in deny
+                    if isinstance(rule, str) and rule != "unsandboxed(*)"
+                ]
+                + managed_denies
             )
         )
         settings.update(

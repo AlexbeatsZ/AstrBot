@@ -32,7 +32,10 @@ def test_astrbot_agent_config_preserves_settings_and_enforces_isolation(
         json.dumps(
             {
                 "trustedWorkspaces": ["/existing"],
-                "permissions": {"allow": ["read_url(example.com)"]},
+                "permissions": {
+                    "allow": ["read_url(example.com)"],
+                    "deny": ["unsandboxed(*)"],
+                },
             }
         ),
         encoding="utf-8",
@@ -46,7 +49,10 @@ def test_astrbot_agent_config_preserves_settings_and_enforces_isolation(
         "read_url(example.com)",
         "command(*)",
     ]
-    assert "unsandboxed(*)" in settings["permissions"]["deny"]
+    assert "unsandboxed(*)" not in settings["permissions"]["deny"]
+    assert any(
+        rule.startswith("read_file(") for rule in settings["permissions"]["deny"]
+    )
     assert settings["toolPermission"] == "proceed-in-sandbox"
     assert settings["artifactReviewPolicy"] == "always-proceed"
     assert settings["allowNonWorkspaceAccess"] is False
