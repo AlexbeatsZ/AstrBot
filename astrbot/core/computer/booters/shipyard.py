@@ -61,10 +61,35 @@ class ShipyardShellWrapper:
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
+        result_payload = (
+            payload["data"] if isinstance(payload.get("data"), dict) else payload
+        )
 
-        stdout = payload.get("output", payload.get("stdout", "")) or ""
-        stderr = payload.get("error", payload.get("stderr", "")) or ""
-        exit_code = payload.get("exit_code")
+        stdout = (
+            result_payload.get(
+                "stdout", result_payload.get("output", payload.get("stdout", ""))
+            )
+            or ""
+        )
+        stderr = (
+            result_payload.get(
+                "stderr", result_payload.get("error", payload.get("error", ""))
+            )
+            or ""
+        )
+        exit_code = result_payload.get("exit_code")
+        if exit_code is None:
+            exit_code = result_payload.get("return_code")
+        if exit_code is None:
+            exit_code = result_payload.get("returncode")
+        success = bool(
+            result_payload.get("success", payload.get("success", not stderr))
+        )
+        execution_id = result_payload.get("execution_id", payload.get("execution_id"))
+        execution_time_ms = result_payload.get(
+            "execution_time_ms", payload.get("execution_time_ms")
+        )
+        executed_command = result_payload.get("command", payload.get("command"))
         if background:
             pid: int | None = None
             try:
@@ -80,20 +105,20 @@ class ShipyardShellWrapper:
                 ),
                 "stderr": stderr,
                 "exit_code": exit_code,
-                "success": bool(payload.get("success", not stderr)),
-                "execution_id": payload.get("execution_id"),
-                "execution_time_ms": payload.get("execution_time_ms"),
-                "command": payload.get("command"),
+                "success": success,
+                "execution_id": execution_id,
+                "execution_time_ms": execution_time_ms,
+                "command": executed_command,
             }
 
         return {
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": exit_code,
-            "success": bool(payload.get("success", not stderr)),
-            "execution_id": payload.get("execution_id"),
-            "execution_time_ms": payload.get("execution_time_ms"),
-            "command": payload.get("command"),
+            "success": success,
+            "execution_id": execution_id,
+            "execution_time_ms": execution_time_ms,
+            "command": executed_command,
         }
 
 

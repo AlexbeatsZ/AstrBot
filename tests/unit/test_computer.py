@@ -377,6 +377,40 @@ class TestShipyardBooter:
     """Tests for ShipyardBooter."""
 
     @pytest.mark.asyncio
+    async def test_shell_wrapper_unwraps_nested_sdk_result(self):
+        """Test shell results returned in the SDK data envelope."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        mock_shell = MagicMock()
+        mock_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "SANDBOX_OK",
+                    "stderr": "",
+                    "pid": 16,
+                    "process_id": None,
+                    "error": None,
+                },
+                "error": None,
+            }
+        )
+
+        result = await ShipyardShellWrapper(mock_shell).exec("printf SANDBOX_OK")
+
+        assert result == {
+            "stdout": "SANDBOX_OK",
+            "stderr": "",
+            "exit_code": 0,
+            "success": True,
+            "execution_id": None,
+            "execution_time_ms": None,
+            "command": None,
+        }
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
