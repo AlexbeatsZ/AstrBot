@@ -41,12 +41,17 @@
 - Agy Skills 需要放在其原生发现位置（工作区 `.agents/skills/<skill>/SKILL.md`、全局 `~/.gemini/config/skills/`，或 Agy plugin 的 `skills/`），提示词不能让 `data/skills` 自动变成 Agy Skills。跨运行时复用前必须区分只含通用指令的 portable Skill 与依赖 `astrbot_*` 工具的 Skill。
 - Agy 沙盒必须由 `--sandbox` / `enableTerminalSandbox` 启用。无头 `--print` 无法处理交互审批，推荐独立 HOME 使用 `toolPermission: proceed-in-sandbox`、`allowNonWorkspaceAccess: false`、禁止 `unsandboxed(*)`，再为必要的 Web/MCP 行为配置最小 allowlist；不要使用全局 `--dangerously-skip-permissions` 作为常规方案。
 - 服务器实测 Agy 1.1.6 原生提供文件、终端、Web、Skills、MCP/子代理等工具，但当前未导入 plugin，实际只发现内置 `antigravity-guide` Skill。`--sandbox --dangerously-skip-permissions` 的只读 `pwd` 验证在 Agy 隔离 scratch 中执行成功，说明 sandbox 是真实运行时能力而非提示词能力。
-- 当前 Agy provider 仍有三项能力缺口：所有会话共用 `data/workspaces` 而非 UMO 级目录；`func_tool` 被忽略，AstrBot 插件/MCP/Web 工具不会自动转交给 Agy；无会话 `--print` 不适合 `ask_permission`、`ask_question`、`schedule` 等交互或跨进程能力。后续 custom agent 应排除这些工具，若需 AstrBot 工具应通过受控 MCP bridge 暴露 allowlist。
+- Agy provider 已补齐 UMO 级工作目录、`--agent astrbot` custom agent、原生 terminal sandbox 和受控 host-tool bridge。无会话 `--print` 仍不适合 `ask_permission`、`ask_question`、`schedule` 等交互或跨进程能力，因此 custom agent 不开放这些工具。
 - Agy CLI 的 Project 不必先做持久化 ID 管理：启动日志表明它会把进程 `cwd` 作为 `workspaceDirs`。AstrBot 已把缺省 `ProviderRequest.session_id` 设为 UMO，因此 provider 可直接复用 `normalize_umo_for_workspace(session_id)`，将每次 Agy 调用的 `cwd` 指向 `data/workspaces/<normalized_umo>`，形成最小的会话级 Project。
 - 现有 AstrBot Docker 只能隔离 Windows 宿主，不能隔离同一挂载卷里的 Agy 认证、AstrBot 配置和其他会话。首版应组合四层边界：custom agent 提示约束、UMO 级 cwd/Project、Agy `allowNonWorkspaceAccess=false` 与原生 terminal sandbox、最外层 AstrBot Docker。暂不采用每请求子容器；只有在 Agy 原生文件策略或 sandbox 回归不能可靠阻止跨 workspace 访问时，再引入仅挂载单一 workspace 的 Agy sidecar/container。
 - Agy terminal sandbox 与聊天隐私是两套边界：sandbox 约束命令执行，AstrBot 传入的 `contexts` 决定模型本轮看到哪些聊天。Agy 自身仍会在独立 HOME 写入 conversation DB；官方按 cwd 过滤可恢复会话，但工具默认可访问 Agy app data。应使用 UMO 级 cwd、永不传 `--continue`/`--conversation`、在 custom agent 中禁用恢复/读取历史，并显式 deny Agy conversation/cache 路径的文件工具访问。
-- Agy provider 当前只在函数签名中接收 `func_tool`，实际未读取工具清单或返回 AstrBot tool call，因此服务器上的 `render_code_to_image`、`render_file_to_image`、`render_math`、`send_image` 等 `@filter.llm_tool` 对 Agy 不可见。相反，`on_llm_request`、`on_llm_response`、`on_decorating_result` 等外围插件钩子仍经过 AstrBot 主流水线，通常可以继续作用于 Agy 的最终文本。
+- Agy provider 现在只向模型披露配置 allowlist 中实际存在的 `func_tool` schema，并把严格、完整匹配的 `<astrbot-tool-call>` 信封转换成标准 `LLMResponse` tool call。默认仅开放 `render_code_to_image`、`render_file_to_image`、`render_math`、`send_image`；shell 等非 allowlist 工具不可见且伪造请求会被拒绝。
 - 渲染工具的最小桥接不必先实现 MCP：只向 Agy custom agent 注入经过 allowlist 的 AstrBot 工具 schema，让 Agy 用严格、整段匹配的结构化信封请求宿主工具；Agy provider 校验工具名和参数后返回标准 `LLMResponse` tool call，由现有 `FunctionToolExecutor` 携带当前 `AstrMessageEvent` 执行，下一轮再把 tool result 交回 Agy。此桥必须默认仅开放渲染类工具，因为宿主工具运行在 Agy sandbox 之外。
+- 2026-07-25 “沙箱环境暂时出了点问题”有两层根因：Shipyard 缺少 `soulter/shipyard-ship:latest` 镜像；镜像恢复后 Bay 的 shell API 返回值又包在 `data` 中且退出码字段为 `return_code`，旧 wrapper 因此丢失 stdout。镜像已恢复，wrapper 已兼容嵌套和两种退出码字段，短生命周期 sandbox 创建、执行与删除通过。
+- Agy 1.1.6 custom agent 未声明 `tools` 时只有只读能力；当前明确开放 `view_file`、`list_dir`、`grep_search`、`find_by_name` 和 `run_command`。该版本文档示例中的 `edit_file` 没有 converter，声明后会使 agent 直接终止，因此文件修改通过 sandbox 内的 `run_command` 完成。
+- Agy 的 `command(*)` allow 只负责无头自动批准；未配置的 `unsandboxed` 仍默认为 Ask 并在 headless 模式自动拒绝。不要显式 deny `unsandboxed(*)`：Agy 1.1.6 会把部分可沙箱命令提前判成冲突。Docker 默认 seccomp 会阻止 nsjail 的用户 namespace；`compose-with-shipyard.yml` 仅为 AstrBot 服务设置 `seccomp=unconfined`，不增加 capabilities，也不创建额外容器。真实回归已验证会话目录可写、相邻会话目录在 sandbox 中不可见。
+- 后台运行 `docker compose` 时不能依赖调用进程的默认目录来解释 `${PWD}`；否则会误挂载 `C:\Windows\System32\data`。部署脚本必须先进入 Compose 项目目录，再重建服务，并用 `docker inspect` 验证 `/AstrBot/data` 的实际 Source。
+- 最终部署镜像为 `alexbeatsz/astrbot:agy-3ffe15eec`。服务器回归结果：`/AstrBot/data` 挂载源正确、`seccomp=unconfined` 生效、WebUI HTTP 200、Alex OneBot 已连接且持续收取消息、Sinm 配置保持禁用；真实 Agy provider 在专属 workspace 写入成功并返回 `PROVIDER_AGY_OK`，真实模型生成 `render_math` host-tool call，跨 workspace 读取被拒绝，服务器没有残留临时 Shipyard 容器。
 
 # Task Board
 
@@ -68,6 +73,6 @@
 - [x] 清理 Agy 遗留 `_source` provider ID，并修正旧 provider-source 迁移的命名和同配置复用行为。
 - [x] 修复 AstrBot 与 Alex NapCat 的 Docker 网络分离，固化 `astrbot_network` 并验证 OneBot 连接；Sinm 保持禁用。
 - [x] 研究 AstrBot 普通模型的 Prompt/Skills/Tools/Sandbox 分层，并验证 Agy CLI 原生 Agent、Skills、工具和 sandbox 的实际行为。
-- [ ] 为 Agy provider 增加 UMO 级 cwd/Project、`--agent astrbot` custom agent、`--sandbox` 和独立 HOME 的 `proceed-in-sandbox` 安全配置；在完成跨 workspace 与无头回归前不启用全局自动批准。
+- [x] 为 Agy provider 增加 UMO 级 cwd/Project、`--agent astrbot` custom agent、`--sandbox` 和独立 HOME 的 `proceed-in-sandbox` 安全配置，并通过真实 workspace 写入与跨 workspace 拒绝回归。
 - [ ] 设计 Agy 原生 Skills 管理；只同步 portable Skills，依赖 AstrBot 工具的 Skills 留待受控 host-tool bridge（必要时再升级 MCP）实现后开放。
-- [ ] 为 Agy 增加默认仅包含代码/Markdown/数学渲染工具的 AstrBot host-tool allowlist，使用结构化信封转为标准 AgentRunner tool call；验证图片直发、工具结果回传、伪造工具名拒绝和非 allowlist 工具不可见。
+- [x] 为 Agy 增加默认仅包含代码/Markdown/数学渲染工具的 AstrBot host-tool allowlist，使用结构化信封转为标准 AgentRunner tool call，并验证工具结果转换、伪造工具名拒绝和非 allowlist 工具不可见。
