@@ -87,6 +87,14 @@ class AgyCLIManager:
         permissions = settings.get("permissions")
         if not isinstance(permissions, dict):
             permissions = {}
+        allow = permissions.get("allow")
+        if not isinstance(allow, list):
+            allow = []
+        permissions["allow"] = list(
+            dict.fromkeys(
+                [rule for rule in allow if isinstance(rule, str)] + ["command(*)"]
+            )
+        )
         deny = permissions.get("deny")
         if not isinstance(deny, list):
             deny = []

@@ -42,7 +42,10 @@ def test_astrbot_agent_config_preserves_settings_and_enforces_isolation(
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
 
     assert settings["trustedWorkspaces"] == ["/existing"]
-    assert settings["permissions"]["allow"] == ["read_url(example.com)"]
+    assert settings["permissions"]["allow"] == [
+        "read_url(example.com)",
+        "command(*)",
+    ]
     assert "unsandboxed(*)" in settings["permissions"]["deny"]
     assert settings["toolPermission"] == "proceed-in-sandbox"
     assert settings["artifactReviewPolicy"] == "always-proceed"
