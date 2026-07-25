@@ -145,7 +145,6 @@ tools:
   - grep_search
   - find_by_name
   - run_command
-  - edit_file
 ---
 
 # Execution Contract
